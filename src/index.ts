@@ -16,10 +16,7 @@ interface Env {
   DEFAULT_SUFFIX?: string;
   DEFAULT_ICON?: string;
   DEFAULT_PRECISION?: string;
-  DEFAULT_PERIOD?: string;
-  DEFAULT_GRANULARITY?: string;
-  DEFAULT_START?: string;
-  DEFAULT_END?: string;
+  // Time-series defaults removed; not used in overview.
 }
 
 type MetricValue = {
@@ -35,18 +32,11 @@ type RevenueCatResponse = Record<string, unknown> & {
   current?: number;
 };
 
-type MetricScope = "overview" | "chart";
+type MetricScope = "overview";
 
 const DEFAULT_BASE_URL = "https://api.revenuecat.com/v2/";
 const DEFAULT_SCOPE: MetricScope = "overview";
 const OVERVIEW_BUNDLE_METRIC = "overview_bundle";
-
-const LEGACY_SCOPE_MAP: Record<string, MetricScope> = {
-  overview: "overview",
-  chart: "chart",
-  charts: "chart",
-  developer_metrics: "chart",
-};
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -92,17 +82,6 @@ export default {
       }
 
       const scope = resolveScope(requestUrl, env);
-
-      if (
-        scope === "chart" &&
-        !requestUrl.searchParams.has("app_id") &&
-        !requestUrl.searchParams.has("rc.app_id")
-      ) {
-        return jsonError(
-          "Query parameter 'app_id' is required when scope is 'chart'",
-          400,
-        );
-      }
 
       const rcUrl = buildRevenueCatUrl(
         metric,
@@ -185,24 +164,7 @@ function buildRevenueCatUrl(
     }
   }
 
-  const scopedPeriod =
-    requestUrl.searchParams.get("period") ?? env.DEFAULT_PERIOD;
-  if (scopedPeriod) params.set("period", scopedPeriod);
-
-  const granularity =
-    requestUrl.searchParams.get("granularity") ?? env.DEFAULT_GRANULARITY;
-  if (granularity) params.set("granularity", granularity);
-
-  const start = requestUrl.searchParams.get("start") ?? env.DEFAULT_START;
-  if (start) params.set("start", start);
-
-  const end = requestUrl.searchParams.get("end") ?? env.DEFAULT_END;
-  if (end) params.set("end", end);
-
-  const appId = requestUrl.searchParams.get("app_id");
-  if (appId) {
-    params.set("app_id", appId);
-  }
+  // No additional time-series or app-scoped parameters are supported.
 
   for (const [key, value] of params.entries()) {
     url.searchParams.set(key, value);
@@ -328,10 +290,8 @@ function jsonError(message: string, status: number): Response {
 }
 
 function resolveScope(requestUrl: URL, env: Env): MetricScope {
-  const raw =
-    requestUrl.searchParams.get("scope") ?? env.DEFAULT_SCOPE ?? DEFAULT_SCOPE;
-  const normalized = raw.toLowerCase();
-  return LEGACY_SCOPE_MAP[normalized] ?? DEFAULT_SCOPE;
+  // Only overview scope is supported.
+  return DEFAULT_SCOPE;
 }
 
 function resolvePath(
@@ -345,11 +305,8 @@ function resolvePath(
     return trimmedOverride;
   }
 
-  if (scope === "overview") {
-    return `projects/${projectId}/metrics/overview`;
-  }
-
-  return `projects/${projectId}/charts/developer_metrics/${metric}`;
+  // Only overview metrics endpoint is supported.
+  return `projects/${projectId}/metrics/overview`;
 }
 
 function pickLabel(...candidates: unknown[]): string | undefined {
