@@ -1,0 +1,12 @@
+name = "lametric-revenuecat"
+main = "src/index.ts"
+compatibility_date = "2024-05-01"
+
+[env.production]
+# Configure your production routes or send "wrangler deploy --env production".
+
+[vars]
+# Example: STATUS_BAR_TITLE = "Revenue"
+
+[observability]
+enabled = true
