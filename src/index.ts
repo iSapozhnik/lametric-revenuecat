@@ -24,6 +24,17 @@ type MetricValue = {
   label?: string;
 };
 
+type GoalData = {
+  start: number;
+  current: number;
+  end: number;
+  unit: string;
+};
+
+type Frame =
+  | { text: string; icon: string }
+  | { icon: string; goalData: GoalData };
+
 type RevenueCatResponse = Record<string, unknown> & {
   data?: Array<Record<string, unknown>>;
   metrics?: Array<Record<string, unknown>>;
@@ -37,6 +48,11 @@ type MetricScope = "overview";
 const DEFAULT_BASE_URL = "https://api.revenuecat.com/v2/";
 const DEFAULT_SCOPE: MetricScope = "overview";
 const OVERVIEW_BUNDLE_METRIC = "overview_bundle";
+
+type GoalParameters = {
+  mrrGoal?: number;
+  subscribersGoal?: number;
+};
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -106,17 +122,29 @@ export default {
       }
 
       const payload = (await rcResponse.json()) as RevenueCatResponse;
-      let frames: Array<{ text: string; icon: string }> = [];
+      const goalParams = parseGoalParams(requestUrl);
+      let frames: Frame[] = [];
 
       if (isOverviewBundle(metric, scope)) {
-        frames = buildOverviewBundleFrames(payload, requestUrl, env);
+        frames = buildOverviewBundleFrames(
+          payload,
+          requestUrl,
+          env,
+          goalParams,
+        );
       } else {
         const metricValue = extractMetricValue(payload, scope, metric);
         if (!metricValue) {
           return jsonError("No numeric data found in RevenueCat response", 502);
         }
 
-        frames = buildSingleMetricFrames(metricValue, metric, requestUrl, env);
+        frames = buildSingleMetricFrames(
+          metricValue,
+          metric,
+          requestUrl,
+          env,
+          goalParams,
+        );
       }
 
       if (frames.length === 0) {
@@ -192,6 +220,28 @@ function ensureTrailingSlash(url: string): string {
     return url;
   }
   return `${url}/`;
+}
+
+function parseGoalParams(requestUrl: URL): GoalParameters {
+  return {
+    mrrGoal: parseNonNegativeInteger(requestUrl.searchParams.get("mrr_goal")),
+    subscribersGoal: parseNonNegativeInteger(
+      requestUrl.searchParams.get("subscribers_goal"),
+    ),
+  };
+}
+
+function parseNonNegativeInteger(raw: string | null): number | undefined {
+  if (raw === null) {
+    return undefined;
+  }
+
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return undefined;
+  }
+
+  return parsed;
 }
 
 function extractMetricValue(
@@ -329,6 +379,8 @@ type MetricRecord = Record<string, unknown> & {
   description?: unknown;
   period?: unknown;
   value?: unknown;
+  current?: unknown;
+  total?: unknown;
 };
 
 type OverviewMetricConfig = {
@@ -351,7 +403,8 @@ function buildOverviewBundleFrames(
   payload: RevenueCatResponse,
   requestUrl: URL,
   env: Env,
-) {
+  goals: GoalParameters,
+): Frame[] {
   const metrics = Array.isArray(payload.metrics)
     ? (payload.metrics.filter(
         (entry): entry is MetricRecord =>
@@ -371,7 +424,7 @@ function buildOverviewBundleFrames(
     }
   }
 
-  const frames: Array<{ text: string; icon: string }> = [];
+  const frames: Frame[] = [];
   const consumed = new Set<string>();
   const fallbackIcon =
     requestUrl.searchParams.get("icon") ?? env.DEFAULT_ICON ?? "i2381";
@@ -403,7 +456,9 @@ function buildOverviewBundleFrames(
     });
   }
 
-  return frames;
+  const goalFrames = buildOverviewGoalFrames(goals, byId);
+
+  return frames.concat(goalFrames);
 }
 
 function buildSingleMetricFrames(
@@ -411,7 +466,8 @@ function buildSingleMetricFrames(
   metric: string,
   requestUrl: URL,
   env: Env,
-) {
+  goals: GoalParameters,
+): Frame[] {
   const label =
     requestUrl.searchParams.get("label") ??
     env.DEFAULT_LABEL ??
@@ -426,7 +482,7 @@ function buildSingleMetricFrames(
 
   const formattedValue = formatNumber(metricValue.value, precision);
 
-  const frames = [
+  const frames: Frame[] = [
     {
       text: `${label}: ${formattedValue}${suffix}`,
       icon,
@@ -438,6 +494,11 @@ function buildSingleMetricFrames(
       text: `${metricValue.label}`,
       icon,
     });
+  }
+
+  const goalFrame = buildSingleMetricGoalFrame(metric, metricValue.value, goals);
+  if (goalFrame) {
+    frames.push(goalFrame);
   }
 
   return frames;
@@ -464,4 +525,76 @@ function formatOverviewMetric(
   }
 
   return `${formatted} ${unit}`;
+}
+
+function buildOverviewGoalFrames(
+  goals: GoalParameters,
+  metricsById: Map<string, MetricRecord>,
+): Frame[] {
+  const frames: Frame[] = [];
+
+  if (typeof goals.mrrGoal === "number") {
+    const metric = metricsById.get("mrr");
+    const current = metric
+      ? pickNumber(metric.current, metric.value, metric.total)
+      : null;
+    if (typeof current === "number") {
+      frames.push(buildGoalFrame(current, goals.mrrGoal, "30756"));
+    }
+  }
+
+  if (typeof goals.subscribersGoal === "number") {
+    const metric = metricsById.get("active_subscriptions");
+    const current = metric
+      ? pickNumber(metric.current, metric.value, metric.total)
+      : null;
+    if (typeof current === "number") {
+      frames.push(buildGoalFrame(current, goals.subscribersGoal, "40354"));
+    }
+  }
+
+  return frames;
+}
+
+function buildSingleMetricGoalFrame(
+  metric: string,
+  currentValue: number,
+  goals: GoalParameters,
+): Frame | null {
+  if (!Number.isFinite(currentValue)) {
+    return null;
+  }
+
+  if (isMrrMetric(metric) && typeof goals.mrrGoal === "number") {
+    return buildGoalFrame(currentValue, goals.mrrGoal, "30756");
+  }
+
+  if (
+    isSubscribersMetric(metric) &&
+    typeof goals.subscribersGoal === "number"
+  ) {
+    return buildGoalFrame(currentValue, goals.subscribersGoal, "40354");
+  }
+
+  return null;
+}
+
+function buildGoalFrame(current: number, goal: number, icon: string): Frame {
+  return {
+    icon,
+    goalData: {
+      start: 0,
+      current,
+      end: goal,
+      unit: "",
+    },
+  };
+}
+
+function isMrrMetric(metric: string): boolean {
+  return metric === "mrr";
+}
+
+function isSubscribersMetric(metric: string): boolean {
+  return metric === "active_subscriptions" || metric === "subscribers";
 }

@@ -5,6 +5,7 @@ Cloudflare Worker that turns **RevenueCat** metrics into a LaMetric dashboard wi
 ## Features
 - One endpoint that returns **LaMetric frames** built from RevenueCat **Overview** metrics.
 - **Single-metric** mode or **multi-frame** dashboard mode (`overview_bundle`).
+- Optional **goal frames** for MRR and Subscribers powered by LaMetric `goalData`.
 - Query param passthrough for selected RevenueCat params (e.g. `currency`).
 - Safe-by-default: requires **project-scoped** credentials and avoids storing tokens server-side.
 - Sensible caching for polling devices.
@@ -83,6 +84,8 @@ Tailor the LaMetric output per-widget without redeploying.
 | `suffix`       | Text appended after the numeric value (e.g., ` subs`, ` €`).                                                                               | Empty string                              |
 | `precision`    | Number of decimal digits (0–6).                                                                                                            | `DEFAULT_PRECISION` or `0`                |
 | `icon`         | LaMetric icon identifier (e.g., `i2381`).                                                                                                  | `DEFAULT_ICON` or `i2381`                 |
+| `mrr_goal`     | Integer target for Monthly Recurring Revenue. Adds a **goal frame** with icon `30756` when MRR data is available.                          | –                                         |
+| `subscribers_goal` | Integer target for active subscribers. Adds a **goal frame** with icon `40354` when subscriber data is available.                  | –                                         |
 | `rc.<name>`    | Any additional RevenueCat query parameter forwarded to the API (e.g., `rc.currency=EUR`).                                                  | –                                         |
 
 **Removed (not used):** `app_id`, `period`, `granularity`, `start`, `end`. Time-series and app-specific filters aren’t supported in this Worker.
@@ -139,6 +142,25 @@ https://<your-worker>.workers.dev/?project=<PROJECT_ID>&metric=mrr&scope=overvie
 
 If the upstream API includes helpful metadata (e.g., a timestamp), the Worker can append it as a second frame automatically (configurable in code).
 
+**Goal frame example** (with `mrr_goal=2000` and `subscribers_goal=120`):
+
+```json
+{
+  "frames": [
+    { "text": "MRR: $1,500", "icon": "30756" },
+    {
+      "icon": "30756",
+      "goalData": { "start": 0, "current": 1500, "end": 2000, "unit": "" }
+    },
+    { "text": "Subscribers: 95", "icon": "40354" },
+    {
+      "icon": "40354",
+      "goalData": { "start": 0, "current": 95, "end": 120, "unit": "" }
+    }
+  ]
+}
+```
+
 ---
 
 ## Authentication & Security
@@ -178,7 +200,8 @@ The Worker returns JSON compatible with LaMetric’s **My Data (DIY)** app:
 
 - Up to **20** frames per response.
 - Optional `duration` per frame (max 10,000 ms for non-scrolling text).
-- Optional `goalData` and `chartData` are supported by LaMetric but not emitted by default.
+- Optional `goalData` frames are emitted automatically when `mrr_goal` or `subscribers_goal` are supplied.
+- Optional `chartData` is supported by LaMetric but not emitted by default.
 
 Refer to LaMetric’s official “My Data (DIY)” JSON spec for all options.
 
