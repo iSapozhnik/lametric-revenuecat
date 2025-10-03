@@ -48,6 +48,8 @@ type MetricScope = "overview";
 const DEFAULT_BASE_URL = "https://api.revenuecat.com/v2/";
 const DEFAULT_SCOPE: MetricScope = "overview";
 const OVERVIEW_BUNDLE_METRIC = "overview_bundle";
+const CHUCK_NORRIS_RANDOM_URL = "https://api.chucknorris.io/jokes/random";
+const CHUCK_NORRIS_ICON = "i32945";
 
 type GoalParameters = {
   mrrGoal?: number;
@@ -71,6 +73,10 @@ export default {
             "Cache-Control": "public, max-age=86400",
           },
         });
+      }
+
+      if (requestUrl.pathname === "/chuck-jokes") {
+        return proxyChuckNorrisJoke(request);
       }
 
       const revenuecatToken = extractBearerToken(
@@ -343,6 +349,82 @@ function jsonError(message: string, status: number): Response {
   });
 }
 
+async function proxyChuckNorrisJoke(request: Request): Promise<Response> {
+  // Proxy the public Chuck Norris joke endpoint for convenience without extra auth.
+  if (request.method !== "GET") {
+    return jsonPlainError("Method Not Allowed", 405, { Allow: "GET" });
+  }
+
+  try {
+    const chuckResponse = await fetch(CHUCK_NORRIS_RANDOM_URL, {
+      headers: {
+        Accept: "application/json",
+      },
+    });
+
+    if (!chuckResponse.ok) {
+      return jsonPlainError(
+        `Chuck Norris API responded with ${chuckResponse.status} ${chuckResponse.statusText}`,
+        chuckResponse.status,
+      );
+    }
+
+    const jokePayload = (await chuckResponse.json()) as {
+      value?: unknown;
+    };
+
+    const joke =
+      typeof jokePayload.value === "string" &&
+      jokePayload.value.trim().length > 0
+        ? jokePayload.value
+        : null;
+
+    if (!joke) {
+      return jsonPlainError("Unexpected response from Chuck Norris API", 502);
+    }
+
+    return new Response(
+      JSON.stringify({
+        frames: [
+          {
+            text: joke,
+            icon: CHUCK_NORRIS_ICON,
+          },
+        ],
+      }),
+      {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "public, max-age=60",
+        },
+      },
+    );
+  } catch (error) {
+    return jsonPlainError(
+      error instanceof Error
+        ? error.message
+        : "Failed to fetch Chuck Norris joke",
+      500,
+    );
+  }
+}
+
+function jsonPlainError(
+  message: string,
+  status: number,
+  extraHeaders: Record<string, string> = {},
+): Response {
+  return new Response(JSON.stringify({ error: message }), {
+    status,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store",
+      ...extraHeaders,
+    },
+  });
+}
+
 function resolveScope(requestUrl: URL, env: Env): MetricScope {
   // Only overview scope is supported.
   return DEFAULT_SCOPE;
@@ -500,7 +582,11 @@ function buildSingleMetricFrames(
     });
   }
 
-  const goalFrame = buildSingleMetricGoalFrame(metric, metricValue.value, goals);
+  const goalFrame = buildSingleMetricGoalFrame(
+    metric,
+    metricValue.value,
+    goals,
+  );
   if (goalFrame) {
     frames.push(goalFrame);
   }
@@ -590,7 +676,10 @@ function buildSingleMetricGoalFrame(
     return buildGoalFrame(currentValue, goals.subscribersGoal, "40354");
   }
 
-  if (isActiveUsersMetric(metric) && typeof goals.activeUsersGoal === "number") {
+  if (
+    isActiveUsersMetric(metric) &&
+    typeof goals.activeUsersGoal === "number"
+  ) {
     return buildGoalFrame(currentValue, goals.activeUsersGoal, "42832");
   }
 
