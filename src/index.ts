@@ -52,6 +52,7 @@ const OVERVIEW_BUNDLE_METRIC = "overview_bundle";
 type GoalParameters = {
   mrrGoal?: number;
   subscribersGoal?: number;
+  activeUsersGoal?: number;
 };
 
 export default {
@@ -227,6 +228,9 @@ function parseGoalParams(requestUrl: URL): GoalParameters {
     mrrGoal: parseNonNegativeInteger(requestUrl.searchParams.get("mrr_goal")),
     subscribersGoal: parseNonNegativeInteger(
       requestUrl.searchParams.get("subscribers_goal"),
+    ),
+    activeUsersGoal: parseNonNegativeInteger(
+      requestUrl.searchParams.get("active_users_goal"),
     ),
   };
 }
@@ -553,6 +557,16 @@ function buildOverviewGoalFrames(
     }
   }
 
+  if (typeof goals.activeUsersGoal === "number") {
+    const metric = metricsById.get("active_users");
+    const current = metric
+      ? pickNumber(metric.current, metric.value, metric.total)
+      : null;
+    if (typeof current === "number") {
+      frames.push(buildGoalFrame(current, goals.activeUsersGoal, "42832"));
+    }
+  }
+
   return frames;
 }
 
@@ -576,6 +590,10 @@ function buildSingleMetricGoalFrame(
     return buildGoalFrame(currentValue, goals.subscribersGoal, "40354");
   }
 
+  if (isActiveUsersMetric(metric) && typeof goals.activeUsersGoal === "number") {
+    return buildGoalFrame(currentValue, goals.activeUsersGoal, "42832");
+  }
+
   return null;
 }
 
@@ -597,4 +615,8 @@ function isMrrMetric(metric: string): boolean {
 
 function isSubscribersMetric(metric: string): boolean {
   return metric === "active_subscriptions" || metric === "subscribers";
+}
+
+function isActiveUsersMetric(metric: string): boolean {
+  return metric === "active_users";
 }
