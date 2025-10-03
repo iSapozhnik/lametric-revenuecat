@@ -1,0 +1,4 @@
+{
+  "effective_date": "2025-10-03",
+  "policy": "This LaMetric RevenueCat worker fetches data from the RevenueCat API on demand to display metrics on a LaMetric device. The widget request must include a RevenueCat Read-Only API token, which is forwarded directly to RevenueCat and never stored or logged by the worker. The worker does not use cookies, tracking pixels, or other identifiers, and it does not persist personal information. Any metrics returned from RevenueCat are delivered back to the requesting LaMetric device in the response and are not retained. We only process the minimum request parameters required to call the RevenueCat API and supply the resulting metrics to your device."
+}

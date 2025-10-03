@@ -1,3 +1,12 @@
+import privacyPolicyJson from "../privacy-policy.json";
+
+type PrivacyPolicy = {
+  effective_date: string;
+  policy: string;
+};
+
+const privacyPolicy = privacyPolicyJson as PrivacyPolicy;
+
 interface Env {
   REVENUECAT_BASE_URL?: string;
   REVENUECAT_ENDPOINT_PATH?: string;
@@ -43,6 +52,20 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     try {
       const requestUrl = new URL(request.url);
+
+      if (
+        requestUrl.pathname === "/privacy" ||
+        requestUrl.pathname === "/privacy-policy"
+      ) {
+        return new Response(JSON.stringify(privacyPolicy), {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "public, max-age=86400",
+          },
+        });
+      }
+
       const revenuecatToken = extractBearerToken(
         request.headers.get("Authorization"),
       );
