@@ -50,6 +50,7 @@ const DEFAULT_SCOPE: MetricScope = "overview";
 const OVERVIEW_BUNDLE_METRIC = "overview_bundle";
 const CHUCK_NORRIS_RANDOM_URL = "https://api.chucknorris.io/jokes/random";
 const CHUCK_NORRIS_ICON = "i32945";
+const GOAL_REACHED_ICON = "14004";
 
 type GoalParameters = {
   mrrGoal?: number;
@@ -686,7 +687,8 @@ function buildSingleMetricGoalFrame(
   return null;
 }
 
-function buildGoalFrame(current: number, goal: number, icon: string): Frame {
+function buildGoalFrame(current: number, goal: number, baseIcon: string): Frame {
+  const icon = current >= goal ? GOAL_REACHED_ICON : baseIcon;
   return {
     icon,
     goalData: {
